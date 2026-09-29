@@ -1,0 +1,28 @@
+{
+  "name": "@rickicode/pi-plugin",
+  "version": "1.0.0",
+  "description": "Bundle of ricki's Pi Coding Agent plugins: Graft context graph, Honcho memory, and Herdr agent state reporting.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "graft",
+    "honcho",
+    "herdr"
+  ],
+  "pi": {
+    "extensions": [
+      "./pi-omp-graft/dist/index.js",
+      "./pi-honcho/dist/index.js"
+    ],
+    "skills": [
+      "./pi-omp-graft/skills"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rickicode/pi-plugin.git"
+  }
+}

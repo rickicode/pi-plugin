@@ -1,0 +1,39 @@
+{
+  "name": "pi-omp-graft",
+  "version": "1.0.0",
+  "description": "High-efficiency Graft context graph integration for Pi coding agent and OMP",
+  "keywords": [
+    "omp-package",
+    "pi-package",
+    "graft",
+    "code-navigation",
+    "context-graph",
+    "blast-radius"
+  ],
+  "author": "ricki",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "omp": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "dependencies": {
+    "typebox": "^1.3.34"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@oh-my-pi/pi-coding-agent": "*"
+  }
+}
