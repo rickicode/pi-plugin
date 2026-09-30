@@ -1,4 +1,4 @@
-// node_modules/typebox/build/system/memory/metrics.mjs
+// ../../../../../npm/node_modules/typebox/build/system/memory/metrics.mjs
 var Metrics = {
   assign: 0,
   create: 0,
@@ -7,7 +7,7 @@ var Metrics = {
   update: 0
 };
 
-// node_modules/typebox/build/guard/guard.mjs
+// ../../../../../npm/node_modules/typebox/build/guard/guard.mjs
 function IsArray(value) {
   return Array.isArray(value);
 }
@@ -40,7 +40,7 @@ function Keys(value) {
 function Symbols(value) {
   return Object.getOwnPropertySymbols(value);
 }
-// node_modules/typebox/build/guard/globals.mjs
+// ../../../../../npm/node_modules/typebox/build/guard/globals.mjs
 function IsTypeArray(value) {
   return globalThis.ArrayBuffer.isView(value);
 }
@@ -53,7 +53,7 @@ function IsSet(value) {
 function IsMap(value) {
   return value instanceof globalThis.Map;
 }
-// node_modules/typebox/build/system/settings/settings.mjs
+// ../../../../../npm/node_modules/typebox/build/system/settings/settings.mjs
 var settings = {
   immutableTypes: false,
   maxErrors: 8,
@@ -68,11 +68,11 @@ var settings = {
 function Get() {
   return settings;
 }
-// node_modules/typebox/build/system/memory/freeze.mjs
+// ../../../../../npm/node_modules/typebox/build/system/memory/freeze.mjs
 function Freeze(value) {
   return Get().immutableTypes ? Object.freeze(value) : value;
 }
-// node_modules/typebox/build/system/memory/clone.mjs
+// ../../../../../npm/node_modules/typebox/build/system/memory/clone.mjs
 function FromClassInstance(value) {
   return value;
 }
@@ -131,7 +131,7 @@ function Clone(value) {
   Metrics.clone += 1;
   return FromValue(value);
 }
-// node_modules/typebox/build/system/memory/create.mjs
+// ../../../../../npm/node_modules/typebox/build/system/memory/create.mjs
 function MergeHidden(left, right) {
   for (const key of Object.keys(right)) {
     Object.defineProperty(left, key, {
@@ -152,7 +152,7 @@ function Create(hidden, enumerable, options = {}) {
   const withHidden = Get().enumerableKind ? Merge(withOptions, hidden) : MergeHidden(withOptions, hidden);
   return Freeze(withHidden);
 }
-// node_modules/typebox/build/system/memory/update.mjs
+// ../../../../../npm/node_modules/typebox/build/system/memory/update.mjs
 function Update(current, hidden, enumerable) {
   Metrics.update += 1;
   const settings = Get();
@@ -175,12 +175,12 @@ function Update(current, hidden, enumerable) {
   }
   return Freeze(result);
 }
-// node_modules/typebox/build/type/types/schema.mjs
+// ../../../../../npm/node_modules/typebox/build/type/types/schema.mjs
 function IsSchema(value) {
   return IsObject(value);
 }
 
-// node_modules/typebox/build/type/engine/optional/instantiate_add.mjs
+// ../../../../../npm/node_modules/typebox/build/type/engine/optional/instantiate_add.mjs
 function AddOptionalOperation(type) {
   return Update(type, { "~optional": true }, {});
 }
@@ -189,12 +189,12 @@ function AddOptionalAction(type, options) {
   return result;
 }
 
-// node_modules/typebox/build/type/action/_add_optional.mjs
+// ../../../../../npm/node_modules/typebox/build/type/action/_add_optional.mjs
 function AddOptional(type, options = {}) {
   return AddOptionalAction(type, options);
 }
 
-// node_modules/typebox/build/type/types/_optional.mjs
+// ../../../../../npm/node_modules/typebox/build/type/types/_optional.mjs
 function Optional(type) {
   return AddOptional(type);
 }
@@ -202,18 +202,18 @@ function IsOptional(value) {
   return IsSchema(value) && HasPropertyKey(value, "~optional");
 }
 
-// node_modules/typebox/build/type/types/properties.mjs
+// ../../../../../npm/node_modules/typebox/build/type/types/properties.mjs
 function RequiredArray(properties) {
   return Keys(properties).filter((key) => !IsOptional(properties[key]));
 }
 
-// node_modules/typebox/build/type/types/object.mjs
+// ../../../../../npm/node_modules/typebox/build/type/types/object.mjs
 function _Object_(properties, options = {}) {
   const requiredKeys = RequiredArray(properties);
   const required = requiredKeys.length > 0 ? { required: requiredKeys } : {};
   return Create({ "~kind": "Object" }, { type: "object", ...required, properties }, options);
 }
-// node_modules/typebox/build/system/hashing/hash.mjs
+// ../../../../../npm/node_modules/typebox/build/system/hashing/hash.mjs
 var ByteMarker;
 (function(ByteMarker) {
   ByteMarker[ByteMarker["Array"] = 0] = "Array";
@@ -238,24 +238,24 @@ var F64 = new Float64Array(1);
 var F64In = new DataView(F64.buffer);
 var F64Out = new Uint8Array(F64.buffer);
 var encoder = new TextEncoder;
-// node_modules/typebox/build/type/types/integer.mjs
+// ../../../../../npm/node_modules/typebox/build/type/types/integer.mjs
 var IntegerPattern = "-?(?:0|[1-9][0-9]*)";
-// node_modules/typebox/build/type/types/number.mjs
+// ../../../../../npm/node_modules/typebox/build/type/types/number.mjs
 var NumberPattern = "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?";
 function Number2(options) {
   return Create({ "~kind": "Number" }, { type: "number" }, options);
 }
-// node_modules/typebox/build/type/types/string.mjs
+// ../../../../../npm/node_modules/typebox/build/type/types/string.mjs
 var StringPattern = ".*";
 function String2(options) {
   return Create({ "~kind": "String" }, { type: "string" }, options);
 }
 
-// node_modules/typebox/build/type/types/record.mjs
+// ../../../../../npm/node_modules/typebox/build/type/types/record.mjs
 var IntegerKey = `^${IntegerPattern}$`;
 var NumberKey = `^${NumberPattern}$`;
 var StringKey = `^${StringPattern}$`;
-// node_modules/typebox/build/type/script/token/internal/char.mjs
+// ../../../../../npm/node_modules/typebox/build/type/script/token/internal/char.mjs
 function Range(start, end) {
   return Array.from({ length: end - start + 1 }, (_, i) => String.fromCharCode(start + i));
 }
@@ -269,17 +269,17 @@ var Digit = [Zero, ...NonZero];
 var UnderScore = "_";
 var DollarSign = "$";
 
-// node_modules/typebox/build/type/script/token/unsigned_integer.mjs
+// ../../../../../npm/node_modules/typebox/build/type/script/token/unsigned_integer.mjs
 var AllowedDigits = [...Digit, UnderScore];
-// node_modules/typebox/build/type/script/token/ident.mjs
+// ../../../../../npm/node_modules/typebox/build/type/script/token/ident.mjs
 var Initial = [...Alpha, UnderScore, DollarSign];
 var Remaining = [...Initial, ...Digit];
-// node_modules/typebox/build/type/script/token/unsigned_number.mjs
+// ../../../../../npm/node_modules/typebox/build/type/script/token/unsigned_number.mjs
 var AllowedDigits2 = [...Digit, UnderScore];
-// node_modules/typebox/build/type/engine/helpers/keys.mjs
+// ../../../../../npm/node_modules/typebox/build/type/engine/helpers/keys.mjs
 var integerKeyPattern = new RegExp("^(?:0|[1-9][0-9]*)$");
 
-// node_modules/typebox/build/type/engine/indexed/from_object.mjs
+// ../../../../../npm/node_modules/typebox/build/type/engine/indexed/from_object.mjs
 var NumericKeyPattern = new RegExp(IntegerKey);
 // src/remote/env-config.ts
 import { readFile } from "node:fs/promises";
@@ -335,6 +335,7 @@ async function loadHonchoEnv(cwd) {
   const workspaceId = (process.env.HONCHO_WORKSPACE_ID || fileEnv.HONCHO_WORKSPACE_ID || "pi-memory").trim();
   const userPeer = (process.env.HONCHO_USER_PEER || fileEnv.HONCHO_USER_PEER || "user").trim();
   const aiPeer = (process.env.HONCHO_AI_PEER || fileEnv.HONCHO_AI_PEER || "pi").trim();
+  const sharedPeers = Array.from(new Set((process.env.HONCHO_SHARED_PEERS || fileEnv.HONCHO_SHARED_PEERS || "").split(",").map((p) => p.trim()).filter(Boolean)));
   if (!apiKey) {
     return null;
   }
@@ -343,7 +344,8 @@ async function loadHonchoEnv(cwd) {
     apiKey,
     workspaceId,
     userPeer,
-    aiPeer
+    aiPeer,
+    sharedPeers
   };
 }
 
@@ -365,10 +367,23 @@ class DirectHonchoClient {
       "Content-Type": "application/json",
       ...options.headers || {}
     };
-    return fetch(url, {
-      ...options,
-      headers
-    });
+    const attempts = 4;
+    let lastError;
+    for (let attempt = 0;attempt < attempts; attempt++) {
+      try {
+        return await fetch(url, {
+          ...options,
+          headers,
+          signal: options.signal ?? AbortSignal.timeout(20000)
+        });
+      } catch (err) {
+        lastError = err;
+        if (options.signal?.aborted)
+          break;
+        await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
   async checkConnection() {
     try {
@@ -400,43 +415,83 @@ class DirectHonchoClient {
       });
     } catch {}
   }
+  readScopes() {
+    const { userPeer, aiPeer, sharedPeers } = this.config;
+    const scopes = [];
+    const push = (observer, observed) => {
+      if (!observer || !observed)
+        return;
+      if (scopes.some((s) => s.observer === observer && s.observed === observed))
+        return;
+      scopes.push({ observer, observed });
+    };
+    for (const observer of [aiPeer, ...sharedPeers]) {
+      push(observer, userPeer);
+      push(observer, observer);
+    }
+    return scopes;
+  }
+  async queryScope(scope, query, limit) {
+    const res = await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/conclusions/query`, {
+      method: "POST",
+      body: JSON.stringify({
+        query,
+        top_k: limit,
+        filters: {
+          observer: scope.observer,
+          observed: scope.observed
+        }
+      })
+    });
+    if (!res.ok)
+      return [];
+    const data = await res.json();
+    if (!Array.isArray(data))
+      return [];
+    return data.map((c) => c.content).filter((content) => Boolean(content));
+  }
   async search(query, limit = 5) {
     try {
-      const conclusionsRes = await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/conclusions/query`, {
-        method: "POST",
-        body: JSON.stringify({
-          query,
-          top_k: limit,
-          filters: {
-            observer: this.config.aiPeer,
-            observed: this.config.userPeer
-          }
-        })
-      });
+      const scopes = this.readScopes();
+      const perScope = Math.max(2, Math.ceil(limit / Math.max(1, scopes.length)) + 1);
+      const results = await Promise.all(scopes.map(async (scope) => ({
+        scope,
+        contents: await this.queryScope(scope, query, perScope)
+      })));
       const items = [];
-      if (conclusionsRes.ok) {
-        const conclusions = await conclusionsRes.json();
-        if (Array.isArray(conclusions)) {
-          for (const c of conclusions) {
-            if (c.content)
-              items.push(`[Fact] ${c.content}`);
-          }
+      const seen = new Set;
+      for (const { scope, contents } of results) {
+        for (const content of contents) {
+          const key = content.trim();
+          if (!key || seen.has(key))
+            continue;
+          seen.add(key);
+          const label = scope.observer === this.config.aiPeer ? scope.observed === this.config.aiPeer ? "[Fact:self]" : "[Fact]" : `[Fact:${scope.observer}]`;
+          items.push(`${label} ${content}`);
         }
       }
-      const searchRes = await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/sessions/${this.sessionId}/search`, {
-        method: "POST",
-        body: JSON.stringify({
-          query
-        })
-      });
-      if (searchRes.ok) {
+      const messagePeers = [this.config.userPeer, this.config.aiPeer].filter((peer, index, all) => peer && all.indexOf(peer) === index);
+      const messageResults = await Promise.all(messagePeers.map(async (peer) => {
+        const searchRes = await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/peers/${peer}/search`, {
+          method: "POST",
+          body: JSON.stringify({
+            query,
+            limit
+          })
+        });
+        if (!searchRes.ok)
+          return [];
         const messages = await searchRes.json();
-        if (Array.isArray(messages)) {
-          for (const m of messages.slice(0, limit)) {
-            if (m.content)
-              items.push(`[${m.peer_id}] ${m.content}`);
-          }
-        }
+        const list = Array.isArray(messages) ? messages : messages.items || [];
+        return list.slice(0, limit).map((m) => `[${m.peer_id || peer}] ${m.content}`);
+      }));
+      const seenMessages = new Set;
+      for (const line of messageResults.flat()) {
+        const body = line.slice(line.indexOf("] ") + 2);
+        if (!body || seenMessages.has(body))
+          continue;
+        seenMessages.add(body);
+        items.push(line);
       }
       return items;
     } catch (err) {
@@ -714,6 +769,7 @@ function honchoPlugin(pi) {
         `Workspace: ${cachedEnvConfig?.workspaceId || "Not set"}`,
         `User Peer: ${cachedEnvConfig?.userPeer || "user"}`,
         `AI Peer: ${cachedEnvConfig?.aiPeer || "pi"}`,
+        `Shared Peers: ${(cachedEnvConfig?.sharedPeers || []).join(", ") || "(none)"}`,
         `Server Health: ${isConnected ? "Online (OK)" : "Offline / Unreachable"}`
       ].join(`
 `);

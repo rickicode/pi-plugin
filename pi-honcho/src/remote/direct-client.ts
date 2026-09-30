@@ -10,6 +10,22 @@ export interface HonchoClientContract {
   getContext(): Promise<string>;
 }
 
+/**
+ * Self-hosted Honcho client.
+ *
+ * Mirrors the read semantics of the Hermes Honcho plugin so `pi` and the Hermes
+ * agents share one memory space:
+ *
+ * - conclusions are read as a union of scopes, because a workspace has no
+ *   cross-peer conclusion query: user facts (`aiPeer` observes `userPeer`),
+ *   this agent's own knowledge (`aiPeer` observes itself), and every sibling
+ *   agent's knowledge (`HONCHO_SHARED_PEERS[i]` observes itself).
+ * - raw message search goes through the workspace-wide peer endpoint
+ *   `/peers/{peer_id}/search`, which sees all sessions of that peer, instead of
+ *   the single deterministic session the old code used.
+ * - writes attach `observer_id`/`observed_id` explicitly so Hermes and the
+ *   other agents read them back.
+ */
 export class DirectHonchoClient implements HonchoClientContract {
   private config: HonchoEnvConfig;
   private sessionId: string;
@@ -29,10 +45,25 @@ export class DirectHonchoClient implements HonchoClientContract {
       ...(options.headers as Record<string, string> || {}),
     };
 
-    return fetch(url, {
-      ...options,
-      headers,
-    });
+    // The self-hosted endpoint is usually behind round-robin DNS; one of the
+    // addresses can refuse connections transiently. Fan-out recall multiplies
+    // the chance of hitting it, so retry connection-level failures only.
+    const attempts = 4;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        return await fetch(url, {
+          ...options,
+          headers,
+          signal: options.signal ?? AbortSignal.timeout(20_000),
+        });
+      } catch (err: unknown) {
+        lastError = err;
+        if (options.signal?.aborted) break;
+        await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
   async checkConnection(): Promise<boolean> {
@@ -79,52 +110,121 @@ export class DirectHonchoClient implements HonchoClientContract {
     }
   }
 
+  /**
+   * Scopes to read conclusions from, as `observer -> observed` pairs.
+   * A Honcho workspace has no cross-peer conclusion query, so shared memory is
+   * reconstructed as a union. Order drives output order: this agent's view of
+   * the user first, then its own knowledge, then each sibling agent's.
+   */
+  private readScopes(): Array<{ observer: string; observed: string }> {
+    const { userPeer, aiPeer, sharedPeers } = this.config;
+    const scopes: Array<{ observer: string; observed: string }> = [];
+
+    const push = (observer: string, observed: string) => {
+      if (!observer || !observed) return;
+      if (scopes.some((s) => s.observer === observer && s.observed === observed)) return;
+      scopes.push({ observer, observed });
+    };
+
+    for (const observer of [aiPeer, ...sharedPeers]) {
+      push(observer, userPeer);
+      push(observer, observer);
+    }
+
+    return scopes;
+  }
+
+  private async queryScope(
+    scope: { observer: string; observed: string },
+    query: string,
+    limit: number
+  ): Promise<string[]> {
+    const res = await this.fetchHoncho(
+      `/v3/workspaces/${this.config.workspaceId}/conclusions/query`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          query,
+          top_k: limit,
+          filters: {
+            observer: scope.observer,
+            observed: scope.observed,
+          },
+        }),
+      }
+    );
+
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as Array<{ content: string }>;
+    if (!Array.isArray(data)) return [];
+
+    return data
+      .map((c) => c.content)
+      .filter((content): content is string => Boolean(content));
+  }
+
   async search(query: string, limit: number = 5): Promise<string[]> {
     try {
-      // 1. Query conclusions (high quality facts)
-      const conclusionsRes = await this.fetchHoncho(
-        `/v3/workspaces/${this.config.workspaceId}/conclusions/query`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            query,
-            top_k: limit,
-            filters: {
-              observer: this.config.aiPeer,
-              observed: this.config.userPeer,
-            },
-          }),
-        }
+      // 1. Union fact recall across the shared scopes.
+      const scopes = this.readScopes();
+      const perScope = Math.max(2, Math.ceil(limit / Math.max(1, scopes.length)) + 1);
+      const results = await Promise.all(
+        scopes.map(async (scope) => ({
+          scope,
+          contents: await this.queryScope(scope, query, perScope),
+        }))
       );
 
       const items: string[] = [];
-      if (conclusionsRes.ok) {
-        const conclusions = (await conclusionsRes.json()) as Array<{ content: string }>;
-        if (Array.isArray(conclusions)) {
-          for (const c of conclusions) {
-            if (c.content) items.push(`[Fact] ${c.content}`);
-          }
+      const seen = new Set<string>();
+      for (const { scope, contents } of results) {
+        for (const content of contents) {
+          const key = content.trim();
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+          const label =
+            scope.observer === this.config.aiPeer
+              ? scope.observed === this.config.aiPeer
+                ? "[Fact:self]"
+                : "[Fact]"
+              : `[Fact:${scope.observer}]`;
+          items.push(`${label} ${content}`);
         }
       }
 
-      // 2. Query session message search
-      const searchRes = await this.fetchHoncho(
-        `/v3/workspaces/${this.config.workspaceId}/sessions/${this.sessionId}/search`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            query,
-          }),
-        }
+      // 2. Workspace-wide raw message search: sees every session each peer took part in.
+      const messagePeers = [this.config.userPeer, this.config.aiPeer].filter(
+        (peer, index, all) => peer && all.indexOf(peer) === index
       );
-
-      if (searchRes.ok) {
-        const messages = (await searchRes.json()) as Array<{ content: string; peer_id: string }>;
-        if (Array.isArray(messages)) {
-          for (const m of messages.slice(0, limit)) {
-            if (m.content) items.push(`[${m.peer_id}] ${m.content}`);
-          }
-        }
+      const messageResults = await Promise.all(
+        messagePeers.map(async (peer) => {
+          const searchRes = await this.fetchHoncho(
+            `/v3/workspaces/${this.config.workspaceId}/peers/${peer}/search`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                query,
+                limit,
+              }),
+            }
+          );
+          if (!searchRes.ok) return [];
+          const messages = (await searchRes.json()) as
+            | Array<{ content: string; peer_id: string }>
+            | { items?: Array<{ content: string; peer_id: string }> };
+          const list = Array.isArray(messages) ? messages : messages.items || [];
+          return list.slice(0, limit).map(
+            (m) => `[${m.peer_id || peer}] ${m.content}`
+          );
+        })
+      );
+      const seenMessages = new Set<string>();
+      for (const line of messageResults.flat()) {
+        const body = line.slice(line.indexOf("] ") + 2);
+        if (!body || seenMessages.has(body)) continue;
+        seenMessages.add(body);
+        items.push(line);
       }
 
       return items;

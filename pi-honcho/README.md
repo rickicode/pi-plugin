@@ -31,7 +31,10 @@ HONCHO_API_KEY=<your-honcho-api-key>
 HONCHO_WORKSPACE_ID=pi-memory
 HONCHO_USER_PEER=user
 HONCHO_AI_PEER=pi
+HONCHO_SHARED_PEERS=hermes,coding   # opsional, default kosong
 ```
+
+Catatan urutan file: `~/.honcho/.env` → `~/.pi/agent/.env` → `~/.omp/agent/.env` → `./.env`. File yang dimuat belakangan **menimpa** nilai sebelumnya, jadi bila `~/.omp/agent/.env` masih berisi workspace lama, konfigurasi itu yang menang.
 
 ---
 
@@ -43,6 +46,23 @@ HONCHO_AI_PEER=pi
 | `honcho_search` | Melakukan pencarian semantik terhadap kesimpulan (*conclusions*) dan percakapan. |
 | `honcho_chat` | Bertanya langsung ke dialektika AI synthesizer Honcho mengenai konteks lampau. |
 | `honcho_context` | Mengambil profil kartu pengguna (*user card*) dan *insights* aktif. |
+
+## Berbagi Memori dengan Hermes
+
+Satu workspace Honcho tidak punya query conclusion lintas-peer. Agar `pi` dan
+Hermes memakai memori yang sama, `HONCHO_SHARED_PEERS` diisi nama AI peer lain di
+workspace yang sama (contoh Hermes: `hermes,coding`).
+
+- **Baca**: `honcho_search` menyatukan conclusion dari scope
+  `aiPeer→userPeer`, `aiPeer→aiPeer`, dan untuk tiap peer bersama
+  `peer→userPeer` serta `peer→peer`, lalu mencari pesan lewat endpoint
+  workspace-wide `/peers/{peer}/search` (melihat semua session peer itu, bukan
+  hanya session satu direktori).
+- **Tulis**: `honcho_remember` menyimpan conclusion dengan
+  `observer_id = HONCHO_AI_PEER`, `observed_id = HONCHO_USER_PEER` sehingga
+  dibaca balik oleh agent lain dengan scope yang sama.
+- Retry 4× dengan backoff untuk IOException, karena endpoint self-hosted sering
+  di belakang DNS round-robin yang sesekali menolak koneksi.
 
 ---
 

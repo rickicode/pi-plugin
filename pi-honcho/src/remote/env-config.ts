@@ -8,6 +8,9 @@ export interface HonchoEnvConfig {
   workspaceId: string;
   userPeer: string;
   aiPeer: string;
+  /** Sibling AI peers sharing the same workspace (e.g. "hermes,coding").
+   * Read fan-out includes their conclusions; empty means no fan-out. */
+  sharedPeers: string[];
 }
 
 async function parseEnvFile(path: string): Promise<Record<string, string>> {
@@ -99,6 +102,15 @@ export async function loadHonchoEnv(cwd?: string): Promise<HonchoEnvConfig | nul
     "pi"
   ).trim();
 
+  const sharedPeers = Array.from(
+    new Set(
+      (process.env.HONCHO_SHARED_PEERS || fileEnv.HONCHO_SHARED_PEERS || "")
+        .split(",")
+        .map((p: string) => p.trim())
+        .filter(Boolean)
+    )
+  );
+
   if (!apiKey) {
     return null;
   }
@@ -109,5 +121,6 @@ export async function loadHonchoEnv(cwd?: string): Promise<HonchoEnvConfig | nul
     workspaceId,
     userPeer,
     aiPeer,
+    sharedPeers,
   };
 }

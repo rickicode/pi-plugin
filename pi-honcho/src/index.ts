@@ -5,7 +5,7 @@ import { DirectHonchoClient } from "./remote/direct-client.js";
 export interface ExtensionApiLike {
   registerTool(def: Record<string, unknown>): void;
   registerCommand(name: string, def: Record<string, unknown>): void;
-  on(event: string, handler: (event: unknown, ctx: unknown) => Promise<unknown> | unknown): void;
+  on(event: string, handler: (event: unknown, ctx: ExtensionContextLike) => Promise<unknown> | unknown): void;
   setActiveTools?(names: string[]): void;
   getActiveTools?(): string[];
 }
@@ -240,6 +240,7 @@ export default function honchoPlugin(pi: ExtensionApiLike): void {
         `Workspace: ${cachedEnvConfig?.workspaceId || "Not set"}`,
         `User Peer: ${cachedEnvConfig?.userPeer || "user"}`,
         `AI Peer: ${cachedEnvConfig?.aiPeer || "pi"}`,
+        `Shared Peers: ${(cachedEnvConfig?.sharedPeers || []).join(", ") || "(none)"}`,
         `Server Health: ${isConnected ? "Online (OK)" : "Offline / Unreachable"}`,
       ].join("\n");
 
