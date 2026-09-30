@@ -380,10 +380,23 @@ class DirectHonchoClient {
         lastError = err;
         if (options.signal?.aborted)
           break;
-        await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+        const backoff = 400 * 2 ** attempt + Math.floor(Math.random() * 200);
+        await new Promise((resolve) => setTimeout(resolve, backoff));
       }
     }
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+  async mapLimit(items, limit, task) {
+    const results = new Array(items.length);
+    let cursor = 0;
+    const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+      while (cursor < items.length) {
+        const index = cursor++;
+        results[index] = await task(items[index]);
+      }
+    });
+    await Promise.all(workers);
+    return results;
   }
   async checkConnection() {
     try {
@@ -454,10 +467,10 @@ class DirectHonchoClient {
     try {
       const scopes = this.readScopes();
       const perScope = Math.max(2, Math.ceil(limit / Math.max(1, scopes.length)) + 1);
-      const results = await Promise.all(scopes.map(async (scope) => ({
+      const results = await this.mapLimit(scopes, 3, async (scope) => ({
         scope,
         contents: await this.queryScope(scope, query, perScope)
-      })));
+      }));
       const items = [];
       const seen = new Set;
       for (const { scope, contents } of results) {
@@ -471,7 +484,7 @@ class DirectHonchoClient {
         }
       }
       const messagePeers = [this.config.userPeer, this.config.aiPeer].filter((peer, index, all) => peer && all.indexOf(peer) === index);
-      const messageResults = await Promise.all(messagePeers.map(async (peer) => {
+      const messageResults = await this.mapLimit(messagePeers, 2, async (peer) => {
         const searchRes = await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/peers/${peer}/search`, {
           method: "POST",
           body: JSON.stringify({
@@ -484,7 +497,7 @@ class DirectHonchoClient {
         const messages = await searchRes.json();
         const list = Array.isArray(messages) ? messages : messages.items || [];
         return list.slice(0, limit).map((m) => `[${m.peer_id || peer}] ${m.content}`);
-      }));
+      });
       const seenMessages = new Set;
       for (const line of messageResults.flat()) {
         const body = line.slice(line.indexOf("] ") + 2);

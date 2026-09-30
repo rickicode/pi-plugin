@@ -56,13 +56,14 @@ workspace yang sama (contoh Hermes: `hermes,coding`).
 - **Baca**: `honcho_search` menyatukan conclusion dari scope
   `aiPeer→userPeer`, `aiPeer→aiPeer`, dan untuk tiap peer bersama
   `peer→userPeer` serta `peer→peer`, lalu mencari pesan lewat endpoint
-  workspace-wide `/peers/{peer}/search` (melihat semua session peer itu, bukan
-  hanya session satu direktori).
+  workspace-wide `/peers/{userPeer|aiPeer}/search` — melihat semua session,
+  bukan hanya session satu direktori.
 - **Tulis**: `honcho_remember` menyimpan conclusion dengan
   `observer_id = HONCHO_AI_PEER`, `observed_id = HONCHO_USER_PEER` sehingga
   dibaca balik oleh agent lain dengan scope yang sama.
-- Retry 4× dengan backoff untuk IOException, karena endpoint self-hosted sering
-  di belakang DNS round-robin yang sesekali menolak koneksi.
+- Retry 4× dengan backoff eksponensial + jitter, dan konkurensi dibatasi (3
+  untuk conclusion, 2 untuk pesan), karena endpoint self-hosted menolak
+  connection churn saat request fan-out menumpuk.
 
 ---
 

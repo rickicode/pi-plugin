@@ -45,9 +45,9 @@ export class DirectHonchoClient implements HonchoClientContract {
       ...(options.headers as Record<string, string> || {}),
     };
 
-    // The self-hosted endpoint is usually behind round-robin DNS; one of the
-    // addresses can refuse connections transiently. Fan-out recall multiplies
-    // the chance of hitting it, so retry connection-level failures only.
+    // The self-hosted endpoint refuses connections under connection churn (SYN
+    // rate limiting), which fan-out recall provokes. Retry with exponential
+    // backoff plus jitter until the burst window passes.
     const attempts = 4;
     let lastError: unknown;
     for (let attempt = 0; attempt < attempts; attempt++) {
@@ -60,10 +60,32 @@ export class DirectHonchoClient implements HonchoClientContract {
       } catch (err: unknown) {
         lastError = err;
         if (options.signal?.aborted) break;
-        await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+        const backoff = 400 * 2 ** attempt + Math.floor(Math.random() * 200);
+        await new Promise((resolve) => setTimeout(resolve, backoff));
       }
     }
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  /** Run async tasks with bounded parallelism, preserving input order. */
+  private async mapLimit<T, R>(
+    items: T[],
+    limit: number,
+    task: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let cursor = 0;
+    const workers = Array.from(
+      { length: Math.max(1, Math.min(limit, items.length)) },
+      async () => {
+        while (cursor < items.length) {
+          const index = cursor++;
+          results[index] = await task(items[index]);
+        }
+      }
+    );
+    await Promise.all(workers);
+    return results;
   }
 
   async checkConnection(): Promise<boolean> {
@@ -169,12 +191,10 @@ export class DirectHonchoClient implements HonchoClientContract {
       // 1. Union fact recall across the shared scopes.
       const scopes = this.readScopes();
       const perScope = Math.max(2, Math.ceil(limit / Math.max(1, scopes.length)) + 1);
-      const results = await Promise.all(
-        scopes.map(async (scope) => ({
-          scope,
-          contents: await this.queryScope(scope, query, perScope),
-        }))
-      );
+      const results = await this.mapLimit(scopes, 3, async (scope) => ({
+        scope,
+        contents: await this.queryScope(scope, query, perScope),
+      }));
 
       const items: string[] = [];
       const seen = new Set<string>();
@@ -197,28 +217,24 @@ export class DirectHonchoClient implements HonchoClientContract {
       const messagePeers = [this.config.userPeer, this.config.aiPeer].filter(
         (peer, index, all) => peer && all.indexOf(peer) === index
       );
-      const messageResults = await Promise.all(
-        messagePeers.map(async (peer) => {
-          const searchRes = await this.fetchHoncho(
-            `/v3/workspaces/${this.config.workspaceId}/peers/${peer}/search`,
-            {
-              method: "POST",
-              body: JSON.stringify({
-                query,
-                limit,
-              }),
-            }
-          );
-          if (!searchRes.ok) return [];
-          const messages = (await searchRes.json()) as
-            | Array<{ content: string; peer_id: string }>
-            | { items?: Array<{ content: string; peer_id: string }> };
-          const list = Array.isArray(messages) ? messages : messages.items || [];
-          return list.slice(0, limit).map(
-            (m) => `[${m.peer_id || peer}] ${m.content}`
-          );
-        })
-      );
+      const messageResults = await this.mapLimit(messagePeers, 2, async (peer) => {
+        const searchRes = await this.fetchHoncho(
+          `/v3/workspaces/${this.config.workspaceId}/peers/${peer}/search`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              query,
+              limit,
+            }),
+          }
+        );
+        if (!searchRes.ok) return [];
+        const messages = (await searchRes.json()) as
+          | Array<{ content: string; peer_id: string }>
+          | { items?: Array<{ content: string; peer_id: string }> };
+        const list = Array.isArray(messages) ? messages : messages.items || [];
+        return list.slice(0, limit).map((m) => `[${m.peer_id || peer}] ${m.content}`);
+      });
       const seenMessages = new Set<string>();
       for (const line of messageResults.flat()) {
         const body = line.slice(line.indexOf("] ") + 2);
