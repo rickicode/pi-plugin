@@ -97,7 +97,26 @@ export class DirectHonchoClient implements HonchoClientContract {
     }
   }
 
+  /**
+   * Ensure both peers exist in the workspace. This fork rejects a conclusion
+   * whose observer/observed peer is unknown (404 "Peer X not found in workspace"),
+   * and attaching a peer to a session is not enough to register it.
+   */
+  async ensurePeers(): Promise<void> {
+    await this.mapLimit([this.config.userPeer, this.config.aiPeer], 2, async (peerId) => {
+      try {
+        await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/peers`, {
+          method: "POST",
+          body: JSON.stringify({ name: peerId }),
+        });
+      } catch {
+        // Peer already exists or endpoint unavailable; creation is best-effort.
+      }
+    });
+  }
+
   async ensureSession(): Promise<void> {
+    await this.ensurePeers();
     try {
       // 1. Create or get session
       await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/sessions`, {
@@ -107,24 +126,20 @@ export class DirectHonchoClient implements HonchoClientContract {
         }),
       });
 
-      // 2. Ensure peers exist
+      // 2. Attach peers. This fork expects a peer-name keyed map, not
+      //    { peer_id }; sending the wrong shape silently creates nothing.
+      //    Shared peers are attached too: message search scoped to
+      //    `peer_perspective=<X>` only sees sessions X participates in, so
+      //    without this the siblings could never read this agent's messages.
+      const peers: Record<string, Record<string, never>> = {};
+      for (const peer of [this.config.userPeer, this.config.aiPeer, ...this.config.sharedPeers]) {
+        if (peer) peers[peer] = {};
+      }
       await this.fetchHoncho(
         `/v3/workspaces/${this.config.workspaceId}/sessions/${this.sessionId}/peers`,
         {
           method: "POST",
-          body: JSON.stringify({
-            peer_id: this.config.userPeer,
-          }),
-        }
-      );
-
-      await this.fetchHoncho(
-        `/v3/workspaces/${this.config.workspaceId}/sessions/${this.sessionId}/peers`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            peer_id: this.config.aiPeer,
-          }),
+          body: JSON.stringify(peers),
         }
       );
     } catch {
@@ -277,20 +292,25 @@ export class DirectHonchoClient implements HonchoClientContract {
 
   async remember(content: string): Promise<string> {
     try {
-      await this.ensureSession();
+      await this.ensurePeers();
+      await this.ensureSession();      // Write fan-out: a sibling agent only reads conclusions written by the
+      // observer it queries (itself, or its view of the user), so one row per
+      // observer is what makes the fact visible to everyone without changing
+      // their read path.
+      const observers = [this.config.aiPeer, ...this.config.sharedPeers].filter(
+        (peer, index, all) => peer && all.indexOf(peer) === index
+      );
       const res = await this.fetchHoncho(
         `/v3/workspaces/${this.config.workspaceId}/conclusions`,
         {
           method: "POST",
           body: JSON.stringify({
-            conclusions: [
-              {
-                content,
-                observer_id: this.config.aiPeer,
-                observed_id: this.config.userPeer,
-                session_id: this.sessionId,
-              },
-            ],
+            conclusions: observers.map((observer) => ({
+              content,
+              observer_id: observer,
+              observed_id: this.config.userPeer,
+              session_id: this.sessionId,
+            })),
           }),
         }
       );

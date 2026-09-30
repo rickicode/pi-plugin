@@ -406,7 +406,18 @@ class DirectHonchoClient {
       return false;
     }
   }
+  async ensurePeers() {
+    await this.mapLimit([this.config.userPeer, this.config.aiPeer], 2, async (peerId) => {
+      try {
+        await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/peers`, {
+          method: "POST",
+          body: JSON.stringify({ name: peerId })
+        });
+      } catch {}
+    });
+  }
   async ensureSession() {
+    await this.ensurePeers();
     try {
       await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/sessions`, {
         method: "POST",
@@ -414,17 +425,14 @@ class DirectHonchoClient {
           id: this.sessionId
         })
       });
+      const peers = {};
+      for (const peer of [this.config.userPeer, this.config.aiPeer, ...this.config.sharedPeers]) {
+        if (peer)
+          peers[peer] = {};
+      }
       await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/sessions/${this.sessionId}/peers`, {
         method: "POST",
-        body: JSON.stringify({
-          peer_id: this.config.userPeer
-        })
-      });
-      await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/sessions/${this.sessionId}/peers`, {
-        method: "POST",
-        body: JSON.stringify({
-          peer_id: this.config.aiPeer
-        })
+        body: JSON.stringify(peers)
       });
     } catch {}
   }
@@ -533,18 +541,18 @@ class DirectHonchoClient {
   }
   async remember(content) {
     try {
+      await this.ensurePeers();
       await this.ensureSession();
+      const observers = [this.config.aiPeer, ...this.config.sharedPeers].filter((peer, index, all) => peer && all.indexOf(peer) === index);
       const res = await this.fetchHoncho(`/v3/workspaces/${this.config.workspaceId}/conclusions`, {
         method: "POST",
         body: JSON.stringify({
-          conclusions: [
-            {
-              content,
-              observer_id: this.config.aiPeer,
-              observed_id: this.config.userPeer,
-              session_id: this.sessionId
-            }
-          ]
+          conclusions: observers.map((observer) => ({
+            content,
+            observer_id: observer,
+            observed_id: this.config.userPeer,
+            session_id: this.sessionId
+          }))
         })
       });
       if (!res.ok) {
