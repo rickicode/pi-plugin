@@ -311,9 +311,10 @@ async function parseEnvFile(path) {
 }
 async function loadHonchoEnv(cwd) {
   const fileEnv = {};
+  const isPi = process.env.AI_AGENT === "pi" || process.env.PI_CODING_AGENT === "true";
+  const agentHome = join(homedir(), isPi ? ".pi" : ".omp", "agent");
+  Object.assign(fileEnv, await parseEnvFile(join(agentHome, ".env")));
   Object.assign(fileEnv, await parseEnvFile(join(homedir(), ".honcho", ".env")));
-  Object.assign(fileEnv, await parseEnvFile(join(homedir(), ".pi", "agent", ".env")));
-  Object.assign(fileEnv, await parseEnvFile(join(homedir(), ".omp", "agent", ".env")));
   if (cwd) {
     Object.assign(fileEnv, await parseEnvFile(join(cwd, ".env")));
   }

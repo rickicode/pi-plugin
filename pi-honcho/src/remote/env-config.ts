@@ -13,8 +13,10 @@ export interface HonchoEnvConfig {
   sharedPeers: string[];
 }
 
-async function parseEnvFile(path: string): Promise<Record<string, string>> {
-  try {
+/** Files loaded by loadHonchoEnv, per agent. The resolution step below already
+ * prefers HONCHO_* from process.env, so only the file order needs fixing. */
+
+async function parseEnvFile(path: string): Promise<Record<string, string>> {  try {
     const raw = await readFile(path, "utf8");
     const parsed: Record<string, string> = {};
     for (const rawLine of raw.split("\n")) {
@@ -41,16 +43,16 @@ async function parseEnvFile(path: string): Promise<Record<string, string>> {
 export async function loadHonchoEnv(cwd?: string): Promise<HonchoEnvConfig | null> {
   const fileEnv: Record<string, string> = {};
 
-  // 1. ~/.honcho/.env or ~/.honcho/config.env
+  // Only this agent's own config directory is read. Reading `~/.omp/agent/.env`
+  // from a pi session made omp's aiPeer win over pi's, because files merge in
+  // load order and omp was merged last.
+  const isPi = process.env.AI_AGENT === "pi" || process.env.PI_CODING_AGENT === "true";
+  const agentHome = join(homedir(), isPi ? ".pi" : ".omp", "agent");
+  Object.assign(fileEnv, await parseEnvFile(join(agentHome, ".env")));
+
+  // Shared location next, then the cwd copy so a project can still override.
   Object.assign(fileEnv, await parseEnvFile(join(homedir(), ".honcho", ".env")));
 
-  // 2. ~/.pi/agent/.env
-  Object.assign(fileEnv, await parseEnvFile(join(homedir(), ".pi", "agent", ".env")));
-
-  // 3. ~/.omp/agent/.env
-  Object.assign(fileEnv, await parseEnvFile(join(homedir(), ".omp", "agent", ".env")));
-
-  // 4. cwd .env
   if (cwd) {
     Object.assign(fileEnv, await parseEnvFile(join(cwd, ".env")));
   }
